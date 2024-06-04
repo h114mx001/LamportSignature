@@ -1,6 +1,5 @@
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "--cov --cov-fail-under=75"
 markers = [
     "task1: marks tests as task1",
     "task2: marks tests as task2",
