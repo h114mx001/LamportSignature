@@ -1,3 +1,4 @@
+from __future__ import annotations
 from Crypto.Hash import SHA256
 from os import urandom                 
 
@@ -6,109 +7,152 @@ import json # for serialization
 from LamportSignature.utils import *
 from LamportSignature.ChaCha20_CSPRNG import ChaCha20_CSPRNG
 
-class LamportSignature:
-    def __init__(self, message: bytes = None, verify_key_0: list[bytes] = None, verify_key_1: list[bytes] = None, signature: bytes = None):
+class LamportVerifyKeyPair: 
+    '''
+    Define the signing key pair for the Lamport signature scheme 
+    '''
+    def __init__(self, verify_key_0: list[bytes], verify_key_1: list[bytes]):
         '''
-        Initialize the Lamport signature with a message, verify key pair, and signature. 
-        You can either create a Null signature, or a signature with a message, verify key pair, and signature. (Does not need to be verified. We will check if we want in verify())
-        + message: the message that you want to sign, in `bytes`
+        Initialize the signing key pair with the verify key pair
         + verify_key_0: 32*256 bit key for 0-bit
         + verify_key_1: 32*256 bit key for 1-bit
-        + signature: the signature of the message
         '''
-        if message == None and verify_key_0 == None and verify_key_1 == None and signature == None:
-            return 
-        
-        if len(message) != BYTE_SIZE:
-            raise ValueError("Invalid message length. Please provide a 256-bit message")
-        if len(signature) != BIT_SIZE * BYTE_SIZE:
-            raise ValueError("Invalid signature length. Please provide a valid signature")
         if not verify_key(verify_key_0) or not verify_key(verify_key_1):
             raise ValueError("Invalid verify keys. Please provide a valid verify key/re-check the generated verify key")
         
-        self.message = message
-        self.verify_key_0 = verify_key_0
-        self.verify_key_1 = verify_key_1
-        self.signature = signature
+        self._verify_key_0 = verify_key_0
+        self._verify_key_1 = verify_key_1
 
-    def verify(self) -> bool: 
+    def __verify(self, message: bytes, signature: LamportSignature) -> bool: 
         '''
-        Verify the signature. 
-        Return True if the signature is valid, False otherwise
+        Verify the signature. Primitive way. Do not use this directly unless you know what you are doing
         '''
-        signature_blocks = blockerize(self.signature, BYTE_SIZE)
-        message_bit_array = get_bit_array(self.message)
-
+        if len(message) != BYTE_SIZE:
+            raise ValueError("Invalid message length. Please provide a 256-bit message")
+        if len(signature.signature) != BIT_SIZE * BYTE_SIZE:
+            raise ValueError("Invalid signature length. Please provide a valid signature")
+        
+        message_bit_array = get_bit_array(message)
+        signature_blocks = blockerize(signature.signature, BYTE_SIZE)
         for i, m_i in enumerate(message_bit_array):
-            if m_i == False:
-                if SHA256.new(signature_blocks[i]).digest() != self.verify_key_0[i]:
+            if m_i:
+                if SHA256.new(signature_blocks[i]).digest() != self._verify_key_1[i]:
                     return False
-            else:
-                if SHA256.new(signature_blocks[i]).digest() != self.verify_key_1[i]:
-                    return False
-        return True   
+                continue
+            if SHA256.new(signature_blocks[i]).digest() != self._verify_key_0[i]:
+                return False
+        return True
+    
+    def verify_primitive(self, message: bytes, signature: LamportSignature) -> bool:
+        '''
+        Verify the signature. Primitive way. Use for task #1 testing
+        '''
+        return self.__verify(message, signature)
+    
+    def hash_and_verify(self, message: bytes, signature: LamportSignature) -> bool:
+        '''
+        Hash-and-verify the signature. 
+        '''
+        hashed_message = SHA256.new(message).digest()
+        if hashed_message != signature.message:
+            return False
+        return self.__verify(hashed_message, signature)
+    
 
-    def get_bare_signature(self) -> bytes:
+    def get_verify_key_pair_as_tuple(self) -> tuple:
         '''
-        Return the signature in a bare form
+        Get the verify key pairs as a tuple
         '''
-        return self.signature
+        return (self._verify_key_0, self._verify_key_1)
+    
+    def get_verify_key_pair_as_byte(self) -> bytes: 
+        '''
+        Get the verify key pair as a bytestream
+        '''
+        return b"".join(self._verify_key_0 + self._verify_key_1)
 
     def serialize(self) -> str: 
         '''
-        Return the signature as a JSON string
+        Serialize the verify key pair
+        '''
+        return json.dumps({
+            "verify_key_0": [key.hex() for key in self._verify_key_0],
+            "verify_key_1": [key.hex() for key in self._verify_key_1]
+        })
+    
+    @staticmethod
+    def deserialize(serialized_verify_key: str):
+        '''
+        Deserialize the verify key pair
+        '''
+        verify_key_dict = json.loads(serialized_verify_key)
+        verify_key_0 = [bytes.fromhex(key) for key in verify_key_dict["verify_key_0"]]
+        verify_key_1 = [bytes.fromhex(key) for key in verify_key_dict["verify_key_1"]]
+        return LamportVerifyKeyPair(verify_key_0, verify_key_1)
+
+
+class LamportSignature:
+    '''
+    Define the bare-borned Lamport Signature. Should not be used directly unless you know what you are doing
+    '''
+    def __init__(self, message: bytes = None, signature: bytes = None):
+        self.message = message
+        self.signature = signature
+
+    def serialize(self) -> str: 
+        '''
+        Serialize the signature
         '''
         return json.dumps({
             "message": self.message.hex(),
-            "verify_key_0": [key.hex() for key in self.verify_key_0],
-            "verify_key_1": [key.hex() for key in self.verify_key_1],
             "signature": self.signature.hex()
         })
-    
-    def deserialize(self, serialized_signature: str):
+
+    @staticmethod
+    def deserialize(serialized_signature: str):
         '''
-        Unflatten the signature
-        TODO: Implement some check on the signature and verify keys
+        Deserialize the signature
         '''
         signature_dict = json.loads(serialized_signature)
         
-        self.message = bytes.fromhex(signature_dict["message"])
-        # assert len(self.message) == BYTE_SIZE
-        self.verify_key_0 = [bytes.fromhex(key) for key in signature_dict["verify_key_0"]]
+        message = bytes.fromhex(signature_dict["message"])
+        signature = bytes.fromhex(signature_dict["signature"])
+        return LamportSignature(message, signature)
 
-        self.verify_key_1 = [bytes.fromhex(key) for key in signature_dict["verify_key_1"]]
-        self.signature = bytes.fromhex(signature_dict["signature"])
-        
+class LamportSigningKeyPair: 
+    ''' 
+    Define the signing key pair for the Lamport signature scheme 
+    '''
 
-class Lamport_256_bit:
-    '''
-    Lamport signature scheme. Primitive and original for one-time signature only
-    '''
-    def __init__(self, sign_key_0: list[bytes] = None, sign_key_1: list[bytes] = None):
+    def __init__(self, sign_key_0: list[bytes], sign_key_1: list[bytes]):
         '''
-        Keygen function for Lamport signature scheme. These keys should come from a cryptographically secure random number generator, and be kept secret. If key0 and key1 are not provided, generate a new key pair.
-
+        Initialize the signing key pair with the sign key pair
         + sign_key_0: 32*256 bit key for 0-bit
         + sign_key_1: 32*256 bit key for 1-bit
         '''
-        if sign_key_0 is None:
-            sign_key_0 = [urandom(BYTE_SIZE) for _ in range(BIT_SIZE)]
-        if sign_key_1 is None:
-            sign_key_1 = [urandom(BYTE_SIZE) for _ in range(BIT_SIZE)]
-        
         if not verify_key(sign_key_0) or not verify_key(sign_key_1):
             raise ValueError("Invalid sign keys. Please provide a valid sign key/re-check the generated sign key")
         
-        self.sign_key_0 = sign_key_0
-        self.sign_key_1 = sign_key_1
-        self.verify_key0 = [SHA256.new(key).digest() for key in sign_key_0]
-        self.verify_key1 = [SHA256.new(key).digest() for key in sign_key_1]
-
-    def sign_256_bit_message(self, message: bytes) -> LamportSignature:
+        self._sign_key_0 = sign_key_0
+        self._sign_key_1 = sign_key_1
+        self._verify_key0 = [SHA256.new(key).digest() for key in sign_key_0]
+        self._verify_key1 = [SHA256.new(key).digest() for key in sign_key_1]
+    
+    def get_verify_key_pairs(self) -> LamportVerifyKeyPair:
         '''
-        Sign a 256-bit message.
-        + message: the message that you want to sign, in `bytes`
-        return: a one-time signature from the sign_key pair
+        Get the corresponding verify key pair for the signing key
+        '''
+        return LamportVerifyKeyPair(self._verify_key0, self._verify_key1)
+    
+    def sign_primitive(self, message: bytes) -> LamportSignature:
+        '''
+        Sign the message, for the task #1 testing
+        '''
+        return self.__sign(message)
+
+    def __sign(self, message: bytes) -> LamportSignature:
+        '''
+        Sign the message
         '''
         if len(message) != BYTE_SIZE:
             raise ValueError("Invalid message length. Please provide a 256-bit message")
@@ -117,26 +161,22 @@ class Lamport_256_bit:
         message_bit_array = get_bit_array(message)
         for i, m_i in enumerate(message_bit_array):
             if m_i:
-                signature += self.sign_key_1[i]
+                signature += self._sign_key_1[i]
                 continue 
-            signature += self.sign_key_0[i]
-        return LamportSignature(message, self.verify_key0, self.verify_key1, signature)
+            signature += self._sign_key_0[i]
+        return LamportSignature(message, signature)
 
-    def get_verify_key_pair(self) -> bytes:
+    def hash_and_sign(self, message: bytes) -> LamportSignature:
         '''
-        Return the verify key pair, as a bytes object 
+        Hash-and-sign the message
         '''
-        return b"".join(self.verify_key0) + b"".join(self.verify_key1)
+        return self.__sign(SHA256.new(message).digest())
     
-class Lamport_ChaCha20(Lamport_256_bit):
-    def __init__(self, secret_seed):
-        '''
-        Initialize the Lamport signature scheme with a secret seed
-        + secret_seed: the secret seed for the ChaCha20 CSPRNG. Must be 32 bytes
-        '''
-        self.secret_seed = secret_seed
-        self.csprng = ChaCha20_CSPRNG(secret_seed)
-        sign_key_0 = [self.csprng.get_random_bytes(BYTE_SIZE) for _ in range(BIT_SIZE)]
-        sign_key_1 = [self.csprng.get_random_bytes(BYTE_SIZE) for _ in range(BIT_SIZE)]
-        super().__init__(sign_key_0, sign_key_1)
-
+def Lamport_ChaCha20_SHA256_keygen(secret_seed: bytes) -> LamportSigningKeyPair:
+    '''
+    Generate the Lamport signing key pair with the secret seed
+    '''
+    csprng = ChaCha20_CSPRNG(secret_seed)
+    sign_key_0 = [csprng.get_random_bytes(BYTE_SIZE) for _ in range(BIT_SIZE)]
+    sign_key_1 = [csprng.get_random_bytes(BYTE_SIZE) for _ in range(BIT_SIZE)]
+    return LamportSigningKeyPair(sign_key_0, sign_key_1)

@@ -29,3 +29,8 @@ def get_bit_array(data: bytes) -> list[bool]:
             bit_array.append((b & (1 << i)) != 0)
     return bit_array
 
+def cumulative_sum(L: int):
+    '''
+    Return the total number of nodes in a binary tree with L levels. (does not count root level)
+    '''
+    return sum([2 ** i for i in range(L + 1)])

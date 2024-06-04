@@ -1,6 +1,8 @@
 # my own files
 backups
 debug.py
+.vscode
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

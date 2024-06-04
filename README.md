@@ -9,9 +9,8 @@ This is the Python Implementation of the Lamport Signature Scheme, a post-quantu
 This implementation includes: 
 
 + Primitive Lamport Signature Scheme (Currently hard-coded for handling 256-bit messages, with SHA-256 as the hash function). 
-  + Come up with a home-made serialization/deserialization for the signature, using `json` module.
-+ Lamport-ChaCha20-Merkle for using 256-bit secret as seed for generate the private key, from a ChaCha20, as well as Merkle Tree for compressing the verify key.
-  + Come up with a home-made serialization/deserialization for the private key, using `json` module.
++ Lamport-ChaCha20-SHA256 for using 256-bit secret as seed for generate the private key, from a ChaCha20, as well as SHA256 hash for standardizing the 256-bit messages (hash-and-sign).
++ A Home-made serialization/deserialization for the private key, using `json` module.
 + ... TBD
 
 ## Installation
