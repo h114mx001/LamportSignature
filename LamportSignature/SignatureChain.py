@@ -53,7 +53,8 @@ class LamportSignatureChain_Signature:
     
 class LamportSignatureChain: 
     '''
-    Implementation of the signer for Lamport Signature, as a stateful signature chain 
+    Implementation of the signer for Lamport Signature, as a stateful signature chain.
+    This signature chain has the state started from 1, and the state will be updated after each signing.
     '''
     def __init__(self, secret_seed: bytes):
         '''
@@ -75,7 +76,7 @@ class LamportSignatureChain:
         # generate a new Lamport pair. Seed sampled from /dev/urandom for your CSPRNG fetish :)))
         new_Lamport = Lamport_ChaCha20_SHA256_keygen(urandom(32))
         # sign the message with the current Lamport pair 
-        new_Lamport_verify_key = new_Lamport.get_verify_key_pairs().get_verify_key_pair_as_byte()
+        new_Lamport_verify_key = new_Lamport.get_verify_key_pairs().get_verify_key_pair_as_bytes()
         # hash the message || new_Lamport_verify_key first, to assert 256-bit message
         current_message = message + new_Lamport_verify_key
         current_signature = self.current_Lamport.hash_and_sign(current_message)
@@ -99,7 +100,7 @@ class LamportSignatureChain:
         # print(signature.past_signatures)
         state_signature = signature.past_signatures[state-1]
         state_verify_key_pair = signature.past_verify_keys[state-1]
-        state_appended_verify_key_bytes = signature.past_verify_keys[state].get_verify_key_pair_as_byte()
+        state_appended_verify_key_bytes = signature.past_verify_keys[state].get_verify_key_pair_as_bytes()
         # print(state_signature.message.hex())        
         padded_message = message + state_appended_verify_key_bytes
         # print(SHA256.new(padded_message).hexdigest())

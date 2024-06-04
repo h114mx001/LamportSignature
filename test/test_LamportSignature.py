@@ -1,5 +1,6 @@
 from LamportSignature.Lamport import LamportSignature, LamportSigningKeyPair, Lamport_ChaCha20_SHA256_keygen
 from LamportSignature.SignatureChain import LamportSignatureChain_Signature, LamportSignatureChain
+from LamportSignature.PRSignatureTree import LamportPRSignatureTree, LamportSignatureTree_Signature
 from os import urandom
 import configparser
 from base64 import b64decode
@@ -99,3 +100,65 @@ def test_five_times_serialize_deserialize_signature_chain():
         serialized = signature.serialize()
         new_signature = LamportSignatureChain_Signature.deserialize(serialized)
         assert LamportSignatureChain.verify(state, message, new_signature) == True
+
+
+def test_one_time_signature_tree(): 
+    key = urandom(16)
+    L = 3 
+    signature_tree = LamportPRSignatureTree(L, key)
+    message = urandom(32)
+    signature = signature_tree.sign(message)
+    result = signature_tree.verify(0, message, signature)
+    assert result == True
+
+def test_one_time_signature_tree_serialization():
+    key = urandom(16)
+    L = 3 
+    signature_tree = LamportPRSignatureTree(L, key)
+    message = urandom(32)
+    signature = signature_tree.sign(message)
+    result = signature_tree.verify(0, message, signature)
+    assert result == True
+    serialized = signature.serialize()
+    new_signature = LamportSignatureTree_Signature.deserialize(serialized)
+    result = signature_tree.verify(0, message, new_signature)
+    assert result == True
+
+def test_five_time_signature_tree_serialization():
+    key = urandom(16)
+    L = 3 
+    signature_tree = LamportPRSignatureTree(L, key)
+    for i in range(0, 5):
+        message = urandom(32)
+        signature = signature_tree.sign(message)
+        result = signature_tree.verify(i, message, signature)
+        assert result == True
+        serialized = signature.serialize()
+        new_signature = LamportSignatureTree_Signature.deserialize(serialized)
+        result = signature_tree.verify(i, message, new_signature)
+        assert result == True
+
+def test_forty_time_signature_tree_serialization():
+    key = urandom(16)
+    L = 6
+    signature_tree = LamportPRSignatureTree(L, key)
+    for i in range(0, 40):
+        message = urandom(32)
+        signature = signature_tree.sign(message)
+        result = signature_tree.verify(i, message, signature)
+        assert result == True
+        serialized = signature.serialize()
+        new_signature = LamportSignatureTree_Signature.deserialize(serialized)
+        result = signature_tree.verify(i, message, new_signature)
+        assert result == True
+
+def test_overload_sign_tree():
+    key = urandom(16)
+    L = 1
+    signature_tree = LamportPRSignatureTree(L, key)
+    with pytest.raises(Exception):
+        for i in range(100):
+            message = urandom(32)
+            signature = signature_tree.sign(message)
+            result = signature_tree.verify(i, message, signature)
+    

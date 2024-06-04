@@ -65,7 +65,7 @@ class LamportVerifyKeyPair:
         '''
         return (self._verify_key_0, self._verify_key_1)
     
-    def get_verify_key_pair_as_byte(self) -> bytes: 
+    def get_verify_key_pair_as_bytes(self) -> bytes: 
         '''
         Get the verify key pair as a bytestream
         '''

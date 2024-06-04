@@ -7,7 +7,7 @@ class LamportSignatureTree_Signature:
     '''
     Define the signature layout for the Lamport signature tree
     '''
-    def __init__(self, counter, authentication_path: list[bytes], message: bytes, signature: bytes):
+    def __init__(self, counter, authentication_path_signature: list[LamportSignature], signature: LamportSignature):
         '''
         Initialize the signature with the authentication path, message, and signature
         + authentication_path: The authentication path for the signature
@@ -15,33 +15,30 @@ class LamportSignatureTree_Signature:
         + signature: The signature
         '''
         self.counter = counter
-        self.authentication_path = authentication_path
-        self.message = message
+        self.authentication_path_signature = authentication_path_signature
         self.signature = signature
 
-    def serialize(self):
+    def serialize(self) -> str: 
         '''
         Serialize the signature
         '''
         return json.dumps({
             "counter": self.counter,
-            "authentication_path": [auth_path.hex() for auth_path in self.authentication_path],
-            "message": self.message.hex(),
-            "signature": self.signature.hex()
+            "authentication_path_signature": [signature.serialize() for signature in self.authentication_path_signature],
+            "signature": self.signature.serialize()
         })
-    
+
     @staticmethod
-    def deserialize(serialized: str):
+    def deserialize(serialized_signature: str):
         '''
         Deserialize the signature
         '''
-        data = json.loads(serialized)
-        return LamportSignatureTree_Signature(
-            data["counter"],
-            [bytes.fromhex(auth_path) for auth_path in data["authentication_path"]],
-            bytes.fromhex(data["message"]),
-            bytes.fromhex(data["signature"])
-        )
+        signature_dict = json.loads(serialized_signature)
+        counter = signature_dict["counter"]
+        authentication_path_signature = [LamportSignature.deserialize(signature) for signature in signature_dict["authentication_path_signature"]]
+        signature = LamportSignature.deserialize(signature_dict["signature"])
+        return LamportSignatureTree_Signature(counter, authentication_path_signature, signature)
+    
 
 class LamportPRSignatureTree_Node:
     '''
@@ -67,12 +64,9 @@ class LamportPRSignatureTree_Node:
         self.signed = False
         # signature caching, for the authentication path
         self.signature = None
-
         key = self.prf.eval(self.id)
         lamport = Lamport_ChaCha20_SHA256_keygen(key)
-        self.verify_key = lamport.get_verify_key_pair()
-        # don't want to store the whole lamport object, just the verify key pair
-        del lamport 
+        self.verify_key = lamport.get_verify_key_pairs()
 
     def is_leaf_node(self):
         '''
@@ -87,7 +81,6 @@ class LamportPRSignatureTree_Node:
         '''
         # if the node is not the leaf node, the signature is actually for authentication path. we can cache it to avoid recomputation.
         # else, if the leaf node reuse the sign key, raise error
-
         if self.signed:
             if (not self.is_leaf_node()):
                 return self.signature
@@ -95,40 +88,52 @@ class LamportPRSignatureTree_Node:
         
         key = self.prf.eval(self.id)
         lamport = Lamport_ChaCha20_SHA256_keygen(key)
-        signature = lamport.sign(message)
+        signature = lamport.hash_and_sign(message)
         self.signed = True
         self.signature = signature
         return signature
     
-    def get_verify_key_pair_as_bytes(self) -> bytes: 
-        '''
-        Get the verify key pair as bytes
-        '''
-        return b"".join(self.verify_key_0 + self.verify_key_1)
-        
     def verify(self, message: bytes, signature: LamportSignature): 
         '''
         Verify a message by the node's verify key pair
         + message: The message to verify
         + signature: The signature to verify
         '''
-        return Lamport_ChaCha20_SHA256_Signature(message, self.verify_key_0, self.verify_key_1, signature).verify()
+        return self.verify_key.hash_and_verify(message, signature)
+        
+    def get_children_verify_keys(self):
+        '''
+        Get the verify keys of the children's node
+        '''
+        left_node_verify_keys = self.left.verify_key.get_verify_key_pair_as_bytes()
+        right_node_verify_keys = self.right.verify_key.get_verify_key_pair_as_bytes()
+        return left_node_verify_keys + right_node_verify_keys
 
-    def get_authentication_path_signature(self):
+    def get_authentication_path_signature(self) -> LamportSignature:
         '''
         Return the signature of the children's node for the authentication path.
         '''
         # if the node is a leaf node, return None 
         if self.is_leaf_node():
             return None
-        left_node_verify_keys = self.left.get_verify_key_pair_as_bytes()
-        right_node_verify_keys = self.right.get_verify_key_pair_as_bytes()
         # Only need to have the signature, but not the whole object. we can regen them in verification step later on
-        return self.sign(left_node_verify_keys + right_node_verify_keys).signature
+        return self.sign(self.get_children_verify_keys())
 
+    def traverse_up_to_root(self):
+        '''
+        Traverse up to the root node and return the authentication path 
+        '''
+        node = self
+        authentication_path = []
+        while node is not None:
+            authentication_path.append(node)
+            node = node.parent
+        return authentication_path[:0:-1]
+    
 class LamportPRSignatureTree:
     '''
-    Design of a SignatureTree, with prescribed security level L 
+    Design of a SignatureTree, with prescribed security level L.
+    This signature has a counter start from 0, and the leaf node has the same value with the counter.
     '''
     def __init__(self, L: int, key: bytes = None):
         '''
@@ -192,7 +197,7 @@ class LamportPRSignatureTree:
         '''
         return self.leaves[counter]
     
-    def __get_authentication_path(self, counter: int):
+    def __get_authentication_path_signature(self, counter: int):
         '''
         Get the authentication path for a node with a specific id
         '''
@@ -203,7 +208,7 @@ class LamportPRSignatureTree:
             node = node.parent
         return authentication_path[:0:-1]
     
-    def sign(self, message: bytes):
+    def sign(self, message: bytes) -> LamportSignatureTree_Signature:
         '''
         Sign a message on the signature tree
         '''
@@ -211,22 +216,29 @@ class LamportPRSignatureTree:
             raise Exception("Signature tree is full")
         # get the current node to sign
         node = self.__get_leaf_with_id(self.counter)
-        authentication_path = self.__get_authentication_path(self.counter)
+        authentication_path_signature = self.__get_authentication_path_signature(self.counter)
         signature = node.sign(message)
         # again, we don't want to store the whole lamport object, just the signature, as everything has been generated.
-        signature = LamportSignatureTree_Signature(self.counter, authentication_path, signature.message, signature.signature)
+        signature = LamportSignatureTree_Signature(self.counter, authentication_path_signature, signature)
         self.counter += 1
         return signature
     
-    def verify(self, signature: LamportSignatureTree_Signature):
+    def verify(self, offset: int, message: bytes, signature: LamportSignatureTree_Signature):
         '''
-        Verify a signature
+        Verify a signature, with the offset on the signature tree
+        + offset: The offset to verify the signature
+        + message: The message to verify
+        + signature: The signature to verify
         '''
-        node = self.__get_leaf_with_id(signature.counter)
-        if not node.verify(signature.message, signature.signature):
+        leaf_node = self.__get_leaf_with_id(offset)
+        if not leaf_node.verify(message, signature.signature):
             return False
-        for i, auth_sig in enumerate(signature.authentication_path):
-            if not node.verify(auth_sig, signature.authentication_path[i]):
+        authentication_path_signature = signature.authentication_path_signature
+        authentication_path_nodes = leaf_node.traverse_up_to_root()
+        if len(authentication_path_signature) != len(authentication_path_nodes):
+            return False
+        for n, s in zip(authentication_path_nodes, authentication_path_signature):
+            node_verify_keys = n.get_children_verify_keys()
+            if not n.verify(node_verify_keys, s):
                 return False
-            node = node.parent
-        return True 
+        return True
