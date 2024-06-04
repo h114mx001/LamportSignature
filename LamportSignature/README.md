@@ -2,10 +2,10 @@
 
 The description is written in alphabetical order.
 
-1. [`AES_PRF.py`](./AES_PRF.py): This module contains the implementation of the AES-128-ECB PRF function, which is used for deriving the next key in the Lamport Tree. In short words, the value of the $AES_PRF(key, x)$ is determined as: 
+1. [`AES_PRF.py`](./AES_PRF.py): This module contains the implementation of the AES-128-ECB PRF function, which is used for deriving the next key in the Lamport Tree. In short words, the value of the $AES_{PRF}(key, x)$ is determined as: 
 
 $$
-AES_PRF(key, x) = AES_{128}(key, PKCS7(x)) || AES_{128}(key, PKCS7(x)[::-1])
+AES_{PRF}(key, x) = AES_{128}(key, PKCS7(x)) || AES_{128}(key, PKCS7(x)[::-1])
 $$
 
 For $PKCS7(x)$ is the padding function that pads the input $x$ to the multiple of 16 bytes, using [PKCS#7](https://en.wikipedia.org/wiki/PKCS_7), and $[::-1]$ is the reverse the value.
