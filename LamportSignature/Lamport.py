@@ -90,7 +90,6 @@ class LamportVerifyKeyPair:
         verify_key_1 = [bytes.fromhex(key) for key in verify_key_dict["verify_key_1"]]
         return LamportVerifyKeyPair(verify_key_0, verify_key_1)
 
-
 class LamportSignature:
     '''
     Define the bare-borned Lamport Signature. Should not be used directly unless you know what you are doing

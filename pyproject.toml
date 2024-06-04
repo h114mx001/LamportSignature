@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--cov --cov-fail-under=75"
+markers = [
+    "task1: marks tests as task1",
+    "task2: marks tests as task2",
+    "task3: marks tests as task3",
+    "task4: marks tests as task4"
+]
+
+[tool.coverage.run]
+source = ["LamportSignature"]  # replace with your module name
+
+[tool.coverage.report]
+fail_under = 75

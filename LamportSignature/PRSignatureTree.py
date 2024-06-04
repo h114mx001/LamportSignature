@@ -1,5 +1,7 @@
-from LamportSignature.Lamport import LamportSignature, LamportSigningKeyPair, LamportVerifyKeyPair, Lamport_ChaCha20_SHA256_keygen   
+
+from LamportSignature.Lamport import LamportSignature, Lamport_ChaCha20_SHA256_keygen   
 from LamportSignature.AES_PRF import AES_PRF
+from LamportSignature.Counter import IncreasementCounter, Counter, DeterministicCounter
 
 import json
 
@@ -38,8 +40,8 @@ class LamportSignatureTree_Signature:
         authentication_path_signature = [LamportSignature.deserialize(signature) for signature in signature_dict["authentication_path_signature"]]
         signature = LamportSignature.deserialize(signature_dict["signature"])
         return LamportSignatureTree_Signature(counter, authentication_path_signature, signature)
-    
 
+# Task #3
 class LamportPRSignatureTree_Node:
     '''
     Design of the signature tree, in order to verify as a binary tree.
@@ -135,21 +137,26 @@ class LamportPRSignatureTree:
     Design of a SignatureTree, with prescribed security level L.
     This signature has a counter start from 0, and the leaf node has the same value with the counter.
     '''
-    def __init__(self, L: int, key: bytes = None):
+    def __init__(self, L: int, key: bytes = None, counter: Counter=None):
         '''
         Initialize the tree with a security level L (L is the depth of the tree, do not count the root node)
         '''
+
         self.L = L 
         self.prf = AES_PRF(key=key)
         # counter to count which leaf node to use for signing
-        self.counter = 0
+        
         # starting leaf has same value with the 1st counter.
         self.offset = 2**self.L - 1
         self.leaves = [None for _ in range(2**self.L)]
-        self.capacity = 2**self.L - 1
+        # self.capacity = 2**self.L - 1
+        capacity = 2**self.L - 1
+        if counter is None:
+            self.counter = IncreasementCounter(0, capacity)
+        else:
+            self.counter = counter
         self.__build_tree(L=self.L)
         
-
     def __str__(self):
         '''
         String representation, mostly for debug
@@ -160,7 +167,6 @@ class LamportPRSignatureTree:
         '''
         Build the tree with L levels. 
         '''
-
         if L == 0:
             self.leaves[root.id - self.offset] = root
             return
@@ -191,17 +197,17 @@ class LamportPRSignatureTree:
         right_node = self.__get_node_with_id(id, starting_node.right)
         return right_node
     
-    def __get_leaf_with_id(self, counter: int) -> LamportPRSignatureTree_Node: 
+    def __get_leaf_with_id(self, id: int) -> LamportPRSignatureTree_Node: 
         '''
-        Get the leaf node with a specific counter
+        Get the leaf node with a specific counter. This function differ from `self.__get_node_with_id` as it will return the leaf node, using the internal cache.
         '''
-        return self.leaves[counter]
+        return self.leaves[id]
     
-    def __get_authentication_path_signature(self, counter: int):
+    def __get_authentication_path_signature(self, id: int):
         '''
         Get the authentication path for a node with a specific id
         '''
-        node = self.__get_leaf_with_id(counter)
+        node = self.__get_leaf_with_id(id)
         authentication_path = []
         while node is not None:
             authentication_path.append(node.get_authentication_path_signature())
@@ -212,24 +218,26 @@ class LamportPRSignatureTree:
         '''
         Sign a message on the signature tree
         '''
-        if self.counter > self.capacity:
+        state = self.counter.next(message=message)
+        print("next state to be signed:", state)
+        if state == -1:
             raise Exception("Signature tree is full")
         # get the current node to sign
-        node = self.__get_leaf_with_id(self.counter)
-        authentication_path_signature = self.__get_authentication_path_signature(self.counter)
+        node = self.__get_leaf_with_id(state)
+        authentication_path_signature = self.__get_authentication_path_signature(state)
         signature = node.sign(message)
         # again, we don't want to store the whole lamport object, just the signature, as everything has been generated.
-        signature = LamportSignatureTree_Signature(self.counter, authentication_path_signature, signature)
-        self.counter += 1
+        signature = LamportSignatureTree_Signature(state, authentication_path_signature, signature)
         return signature
     
-    def verify(self, offset: int, message: bytes, signature: LamportSignatureTree_Signature):
+    def verify(self, message: bytes, signature: LamportSignatureTree_Signature):
         '''
         Verify a signature, with the offset on the signature tree
         + offset: The offset to verify the signature
         + message: The message to verify
         + signature: The signature to verify
         '''
+        offset = signature.counter
         leaf_node = self.__get_leaf_with_id(offset)
         if not leaf_node.verify(message, signature.signature):
             return False
@@ -242,3 +250,17 @@ class LamportPRSignatureTree:
             if not n.verify(node_verify_keys, s):
                 return False
         return True
+
+# Task #4
+class LamportDeterministicSignatureTree(LamportPRSignatureTree):
+    '''
+    Lamport Deterministic Signature tree, that uses the deterministic counter as designed in `Counter.py`
+    '''
+    def __init__(self, L: int, tree_key: bytes = None, counter_key: bytes=None):
+        '''
+        Initialize the tree with a security level L
+        '''
+        assert len(tree_key) == 16
+        assert len(counter_key) == 16
+        counter = DeterministicCounter(counter_key, 0, 2**L - 1)
+        super().__init__(L, tree_key, counter=counter)

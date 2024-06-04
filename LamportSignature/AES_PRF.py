@@ -43,3 +43,4 @@ class AES_PRF:
         cipher = AES.new(self.key, AES.MODE_ECB)
         key_2nd = cipher.encrypt(pad_message[::-1])
         return key_1st + key_2nd
+    
