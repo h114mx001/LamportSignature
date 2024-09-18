@@ -1,9 +1,5 @@
 # Lamport Signature Scheme 
 
-Cryptography - COMP4050 - Final Project 
-
-## Description 
-
 This is the Python Implementation of the Lamport Signature Scheme, a post-quantum cryptographic & secret-key signature scheme. 
 
 This implementation includes: 
