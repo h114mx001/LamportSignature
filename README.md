@@ -8,10 +8,12 @@ This implementation includes:
 - [x] (Task 01) A keygen function that takes advantage of `ChaCha20` as a CSPRNG for generating the private key.
 - [x] (Ultility) Hash-and-sign mode for the message, which uses the hash of the message as the message itself. The default hash function is `SHA-256`.
 - [x] (Task 02) Implementation of Signature Chain, which is used for achieve Many-Time Signature (MTS) from the Lamport Signature Scheme.
-- [x] (Task 03) Implementation of Lamport Signature Pseudorandom Tree, which is used for achieve Many-Time Signature (OTS) from the Lamport Signature Scheme. The PRF for the node to be used is based on a home-made implementation from AES-128-ECB (indeedly, not provenly secure :D)
-- [x] (Task 04) Implementation of Lamport Signature Deterministic Tree, which inherited the Pseudorandom Tree, but with a deterministic counter that can determine which leaf node to be used for signing. 
+- [ ] (Task 03) Implementation of Lamport Signature Pseudorandom Tree, which is used for achieve Many-Time Signature (OTS) from the Lamport Signature Scheme. The PRF for the node to be used is based on a home-made implementation from AES-128-ECB (indeedly, not provenly secure :D)
+- [ ] (Task 04) Implementation of Lamport Signature Deterministic Tree, which inherited the Pseudorandom Tree, but with a deterministic counter that can determine which leaf node to be used for signing. 
 
 For more information about each modules, please refer to the [README file](./LamportSignature/README.md) inside the package
+
+UPDATE: Pseudorandom Tree is being reimplemented to generate default 256 (8 "sub" signatures), instead of storing and caching the whole tree. 
 
 ## Installation
 
